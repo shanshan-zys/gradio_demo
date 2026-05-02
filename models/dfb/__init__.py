@@ -1,0 +1,1 @@
+from .clip_freq_detector import ClipMultiDetector

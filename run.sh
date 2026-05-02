@@ -1,5 +1,5 @@
-bash setup.sh
-conda activate llava
+bash setup_local.sh
+conda activate forgery_detect
 
 cd gradio_demo
 export PYTHONPATH="./models:$PYTHONPATH"

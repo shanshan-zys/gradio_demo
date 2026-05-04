@@ -1,1 +1,11 @@
 checkpoints/
+uploaded_data/
+outputs/
+__pycache__/
+*.pyc
+*.pth
+*.bin
+*.safetensors
+*.msgpack
+debug_output.png
+frpc_linux_amd64_v0.2

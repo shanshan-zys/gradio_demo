@@ -29,7 +29,7 @@ def clear_outputs():
     )
 
 
-def detect_and_crop_face(pil_img, margin=40, conf_threshold=0.95):
+def detect_and_crop_face(pil_img, margin=40, conf_threshold=0.98):
     boxes, probs = mtcnn.detect(pil_img)
 
     if boxes is None or len(boxes) == 0:
@@ -98,7 +98,7 @@ def detect_forgery(input_img, question):
 
     face_img, all_faces, face_status = detect_and_crop_face(input_img)
     if face_img is None:
-        return {}, None, "", "", []
+        return {}, None, "", face_status, []
 
     # SFMM
     input_img_sfmm = preprocess_image_center_crop(face_img, size=(224, 224))

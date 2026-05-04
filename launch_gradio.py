@@ -114,7 +114,10 @@ def detect_forgery(input_img, question):
 
     label = {'fake': sfmm_output_label, 'real':1-sfmm_output_label}
 
-    return label, sfmm_output_image, safe_df_output, face_status, all_faces
+    thumbnail_size = (128, 128)
+    all_faces_thumb = [f.resize(thumbnail_size, Image.Resampling.LANCZOS) for f in all_faces]
+
+    return label, sfmm_output_image, safe_df_output, face_status, all_faces_thumb
 
 
 

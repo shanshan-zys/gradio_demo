@@ -24,7 +24,8 @@ def clear_outputs():
         gr.update(value=""),
         gr.update(value=""),
         gr.update(value=None),
-        gr.update(value="")
+        gr.update(value=""),
+        gr.update(value=None)
     )
 
 
@@ -32,20 +33,22 @@ def detect_and_crop_face(pil_img, margin=40):
     boxes, probs = mtcnn.detect(pil_img)
 
     if boxes is None or len(boxes) == 0:
-        return None, "未检测到人脸，请上传包含人脸的图片"
+        return None, [], "未检测到人脸，请上传包含人脸的图片"
 
-    areas = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
-    best_idx = areas.index(max(areas))
-    box = boxes[best_idx]
-
-    x1, y1, x2, y2 = box
     w, h = pil_img.size
-    x1 = max(0, int(x1 - margin))
-    y1 = max(0, int(y1 - margin))
-    x2 = min(w, int(x2 + margin))
-    y2 = min(h, int(y2 + margin))
+    all_faces = []
+    areas = []
+    for box in boxes:
+        x1, y1, x2, y2 = box
+        areas.append((x2 - x1) * (y2 - y1))
+        cx1 = max(0, int(x1 - margin))
+        cy1 = max(0, int(y1 - margin))
+        cx2 = min(w, int(x2 + margin))
+        cy2 = min(h, int(y2 + margin))
+        all_faces.append(pil_img.crop((cx1, cy1, cx2, cy2)))
 
-    face_img = pil_img.crop((x1, y1, x2, y2))
+    best_idx = areas.index(max(areas))
+    face_img = all_faces[best_idx]
 
     n_faces = len(boxes)
     if n_faces == 1:
@@ -53,7 +56,7 @@ def detect_and_crop_face(pil_img, margin=40):
     else:
         info = f"检测到 {n_faces} 张人脸，已选择最大的一张进行分析"
 
-    return face_img, info
+    return face_img, all_faces, info
     
     
 def preprocess_image_center_crop(pil_img, size=(224, 224)):
@@ -87,9 +90,9 @@ def detect_forgery(input_img, question):
     question: str (用户选择的问题)
     """
 
-    face_img, face_status = detect_and_crop_face(input_img)
+    face_img, all_faces, face_status = detect_and_crop_face(input_img)
     if face_img is None:
-        return {}, None, "", face_status
+        return {}, None, "", "", []
 
     # SFMM
     input_img_sfmm = preprocess_image_center_crop(face_img, size=(224, 224))
@@ -105,7 +108,7 @@ def detect_forgery(input_img, question):
 
     label = {'fake': sfmm_output_label, 'real':1-sfmm_output_label}
 
-    return label, sfmm_output_image, safe_df_output, face_status
+    return label, sfmm_output_image, safe_df_output, face_status, all_faces
 
 
 
@@ -135,8 +138,8 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
     with gr.Row():
         # --- 左侧：输入层 ---
         with gr.Column(scale=1):
-            input_img = gr.Image(type="pil", label="人脸图像", height=300, sources=["upload", "webcam", "clipboard"])
-            
+            input_img = gr.Image(type="pil", label="人脸图像", height=300, sources=["upload", "webcam"])
+
             question_dropdown = gr.Dropdown(
                 choices=[
                     "Does the image look real/fake?",
@@ -145,15 +148,16 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
                     "Does the person's mouth look real/fake?",
                     "Does the person's eyes look real/fake?"
                 ],
-                value="Does the image look real/fake?",  # 默认值
+                value="Does the image look real/fake?",
                 label="检测问题"
             )
-            
+
             submit_btn = gr.Button("开始分析", variant="primary")
+            face_status = gr.Textbox(label="人脸检测状态", interactive=False)
 
         # --- 右侧：输出层 ---
         with gr.Column(scale=1):
-            face_status = gr.Textbox(label="人脸检测状态", interactive=False)
+            face_gallery = gr.Gallery(label="检测到的人脸", columns=4, height=150, object_fit="contain", preview=False)
             with gr.Group():
                 output_label = gr.Label(label="SFMM 真伪判断")
                 output_heatmap = gr.Image(label="SFMM 注意力热力图")
@@ -162,7 +166,7 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
     gr.Examples(
         examples=real_example_list,
         inputs=[input_img, question_dropdown],
-        outputs=[output_label, output_heatmap, output_explanation, face_status],
+        outputs=[output_label, output_heatmap, output_explanation, face_status, face_gallery],
         label="Real Detection Examples",
         cache_examples=False
     )
@@ -170,7 +174,7 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
     gr.Examples(
         examples=fake_example_list,
         inputs=[input_img, question_dropdown],
-        outputs=[output_label, output_heatmap, output_explanation, face_status],
+        outputs=[output_label, output_heatmap, output_explanation, face_status, face_gallery],
         label="Fake Detection Examples",
         cache_examples=False
     )
@@ -179,11 +183,11 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
     submit_btn.click(
         fn=clear_outputs,
         inputs=[],
-        outputs=[output_label, output_explanation, output_heatmap, face_status]
+        outputs=[output_label, output_explanation, output_heatmap, face_status, face_gallery]
     ).then(
         fn=detect_forgery,
         inputs=[input_img, question_dropdown],
-        outputs=[output_label, output_heatmap, output_explanation, face_status]
+        outputs=[output_label, output_heatmap, output_explanation, face_status, face_gallery]
     )
 
 demo.queue()

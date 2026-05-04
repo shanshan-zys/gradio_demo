@@ -17,7 +17,7 @@ pip install accelerate==0.28.0
 pip install bitsandbytes
 
 # 其他依赖
-pip install gradio sentencepiece protobuf scipy scikit-learn matplotlib pyyaml shortuuid safetensors pillow tensorboard
+pip install gradio sentencepiece protobuf scipy scikit-learn matplotlib pyyaml shortuuid safetensors pillow tensorboard facenet-pytorch
 
 echo "========================================="
 echo "依赖安装完成！"

@@ -6,6 +6,7 @@ from models.safe_df import init_safe_df_model, safe_df_predict
 import torch
 import os
 import tempfile
+from facenet_pytorch import MTCNN
 
 # user_gradio_temp = os.path.expanduser("~/.gradio_temp")
 tempfile.tempdir = './uploaded_data'
@@ -14,16 +15,45 @@ device = 'cuda'
 load_8bit = torch.cuda.get_device_properties(0).total_memory < 16 * 1024**3 if torch.cuda.is_available() else False
 sfmm_model = init_sfmm_model(device=device)
 tokenizer, model, image_processor, context_len = init_safe_df_model(load_8bit=load_8bit)
+mtcnn = MTCNN(keep_all=True, device=device if torch.cuda.is_available() else 'cpu')
 
 
 
 def clear_outputs():
-    """清空所有输出组件：文本置空、图片置None"""
     return (
-        gr.update(value=""),          # 清空output_label（标签/文本）
-        gr.update(value=None),       # 清空output_heatmap（图片组件）
-        gr.update(value="")          # 清空output_explanation（解释文本）
+        gr.update(value=""),
+        gr.update(value=""),
+        gr.update(value=None),
+        gr.update(value="")
     )
+
+
+def detect_and_crop_face(pil_img, margin=40):
+    boxes, probs = mtcnn.detect(pil_img)
+
+    if boxes is None or len(boxes) == 0:
+        return None, "未检测到人脸，请上传包含人脸的图片"
+
+    areas = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
+    best_idx = areas.index(max(areas))
+    box = boxes[best_idx]
+
+    x1, y1, x2, y2 = box
+    w, h = pil_img.size
+    x1 = max(0, int(x1 - margin))
+    y1 = max(0, int(y1 - margin))
+    x2 = min(w, int(x2 + margin))
+    y2 = min(h, int(y2 + margin))
+
+    face_img = pil_img.crop((x1, y1, x2, y2))
+
+    n_faces = len(boxes)
+    if n_faces == 1:
+        info = "检测到 1 张人脸"
+    else:
+        info = f"检测到 {n_faces} 张人脸，已选择最大的一张进行分析"
+
+    return face_img, info
     
     
 def preprocess_image_center_crop(pil_img, size=(224, 224)):
@@ -56,29 +86,26 @@ def detect_forgery(input_img, question):
     input_img: PIL Image
     question: str (用户选择的问题)
     """
-    
-    # image = PIL.Image.Image
-    
+
+    face_img, face_status = detect_and_crop_face(input_img)
+    if face_img is None:
+        return {}, None, "", face_status
+
     # SFMM
-    input_img_sfmm = preprocess_image_center_crop(input_img, size=(224, 224))
+    input_img_sfmm = preprocess_image_center_crop(face_img, size=(224, 224))
     image = preprocess(input_img_sfmm).unsqueeze(0).to(device)
     with torch.inference_mode():
         sfmm_output = sfmm_model({'image':image, 'label':torch.tensor(1)}, inference=True)
     sfmm_output_image = analyze_sfmm_attention(input_img_sfmm, sfmm_output)
     sfmm_output_label = round(float(sfmm_output['prob'][0].detach().cpu()),3)
-    
-    
+
     # SAFE-DF
-    input_img_safe_df = preprocess_image_center_crop(input_img, size=(336,336))
+    input_img_safe_df = preprocess_image_center_crop(face_img, size=(336,336))
     safe_df_output = safe_df_predict(input_img_safe_df, question, tokenizer, model, image_processor, context_len)
-    # safe_df_output = "这是一个模拟的解释性分析结果，实际结果请接入 SAFE-DF 模型进行推理。"
-    
-    # 输出：
+
     label = {'fake': sfmm_output_label, 'real':1-sfmm_output_label}
-    mock_heatmap = sfmm_output_image
-    explanation = safe_df_output
-    
-    return label, mock_heatmap, safe_df_output
+
+    return label, sfmm_output_image, safe_df_output, face_status
 
 
 
@@ -126,47 +153,37 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
 
         # --- 右侧：输出层 ---
         with gr.Column(scale=1):
+            face_status = gr.Textbox(label="人脸检测状态", interactive=False)
             with gr.Group():
-                # gr.Markdown("### 检测结果")
                 output_label = gr.Label(label="SFMM 真伪判断")
-                
-                # gr.Markdown("### Attention Map (模型关注区域)")
                 output_heatmap = gr.Image(label="SFMM 注意力热力图")
-                
-                # gr.Markdown("### 伪造原因解释")
                 output_explanation = gr.Textbox(label="SAFE-DF 解释性分析", lines=4)
                 
     gr.Examples(
-        examples=real_example_list,          
-        inputs=[input_img, question_dropdown], 
-        outputs=[output_label, output_heatmap, output_explanation],  
-        label="Real Detection Examples",      
-        cache_examples=False        
-        # run_on_click=True,             
-        # cache_examples=True,           # 缓存示例结果，提升速度
-        # example_title=["示例1", "示例2", "示例3"],  # 给每个示例命名
+        examples=real_example_list,
+        inputs=[input_img, question_dropdown],
+        outputs=[output_label, output_heatmap, output_explanation, face_status],
+        label="Real Detection Examples",
+        cache_examples=False
     )
-    
+
     gr.Examples(
-        examples=fake_example_list,          
-        inputs=[input_img, question_dropdown], 
-        outputs=[output_label, output_heatmap, output_explanation],  
-        label="Fake Detection Examples",      
-        cache_examples=False        
-        # run_on_click=True,             
-        # cache_examples=True,           # 缓存示例结果，提升速度
-        # example_title=["示例1", "示例2", "示例3"],  # 给每个示例命名
+        examples=fake_example_list,
+        inputs=[input_img, question_dropdown],
+        outputs=[output_label, output_heatmap, output_explanation, face_status],
+        label="Fake Detection Examples",
+        cache_examples=False
     )
 
     # 绑定事件
     submit_btn.click(
         fn=clear_outputs,
         inputs=[],
-        outputs=[output_label, output_heatmap, output_explanation]
-    ).then(                              # 第二步：执行核心检测
+        outputs=[output_label, output_explanation, output_heatmap, face_status]
+    ).then(
         fn=detect_forgery,
         inputs=[input_img, question_dropdown],
-        outputs=[output_label, output_heatmap, output_explanation]
+        outputs=[output_label, output_heatmap, output_explanation, face_status]
     )
 
 demo.queue()

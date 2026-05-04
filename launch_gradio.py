@@ -29,12 +29,18 @@ def clear_outputs():
     )
 
 
-def detect_and_crop_face(pil_img, margin=40):
+def detect_and_crop_face(pil_img, margin=40, conf_threshold=0.95):
     boxes, probs = mtcnn.detect(pil_img)
 
     if boxes is None or len(boxes) == 0:
         return None, [], "未检测到人脸，请上传包含人脸的图片"
 
+    # 过滤低置信度的检测结果
+    filtered = [(box, prob) for box, prob in zip(boxes, probs) if prob >= conf_threshold]
+    if len(filtered) == 0:
+        return None, [], "未检测到人脸，请上传包含人脸的图片"
+
+    boxes = [item[0] for item in filtered]
     w, h = pil_img.size
     all_faces = []
     areas = []

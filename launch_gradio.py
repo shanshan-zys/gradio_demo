@@ -163,7 +163,7 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
 
         # --- 右侧：输出层 ---
         with gr.Column(scale=1):
-            face_gallery = gr.Gallery(label="检测到的人脸", columns=4, height=150, object_fit="contain", preview=False)
+            face_gallery = gr.Gallery(label="检测到的人脸", columns=4, rows=1, height=160, object_fit="cover", preview=False)
             with gr.Group():
                 output_label = gr.Label(label="SFMM 真伪判断")
                 output_heatmap = gr.Image(label="SFMM 注意力热力图")

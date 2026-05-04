@@ -187,6 +187,6 @@ with gr.Blocks(title="通用的人脸伪造检测系统") as demo:
     )
 
 demo.queue()
-demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("GRADIO_SERVER_PORT", 7860)), share=False)
 
 # demo.launch()

@@ -1,6 +1,5 @@
-bash setup_local.sh
-conda activate forgery_detect
+#!/bin/bash
+# 首次运行先执行: bash setup_local.sh
 
-cd gradio_demo
 export PYTHONPATH="./models:$PYTHONPATH"
-CUDA_VISIBLE_DEVICES=1 python launch_gradio.py
+CUDA_VISIBLE_DEVICES=0 python launch_gradio.py

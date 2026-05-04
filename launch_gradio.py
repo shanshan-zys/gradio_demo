@@ -11,7 +11,7 @@ import tempfile
 tempfile.tempdir = './uploaded_data'
 
 device = 'cuda'
-load_8bit = torch.cuda.get_device_properties(0).total_mem < 16 * 1024**3 if torch.cuda.is_available() else False
+load_8bit = torch.cuda.get_device_properties(0).total_memory < 16 * 1024**3 if torch.cuda.is_available() else False
 sfmm_model = init_sfmm_model(device=device)
 tokenizer, model, image_processor, context_len = init_safe_df_model(load_8bit=load_8bit)
 
